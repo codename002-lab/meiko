@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NanoStudio AI — Prompt-Based Image Editing Studio</title>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            obsidian: {
+              950: '#09090b',
+              900: '#101014',
+              850: '#16161c',
+              800: '#1e1e26',
+              700: '#2a2a35',
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    /* Custom scrollbar for dark studio UI */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #101014;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #2a2a35;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3f3f4e;
+    }
+
+    /* Subtle studio checkerboard background for transparent/fitted canvases */
+    .studio-checkerboard {
+      background-color: #0d0d11;
+      background-image:
+        linear-gradient(45deg, #15151c 25%, transparent 25%),
+        linear-gradient(-45deg, #15151c 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #15151c 75%),
+        linear-gradient(-45deg, transparent 75%, #15151c 75%);
+      background-size: 24px 24px;
+      background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+    }
+
+    /* Prevent text/image selection while dragging split comparison handle */
+    .no-select {
+      user-select: none;
+      -webkit-user-select: none;
+    }
+  </style>
+</head>
+<body class="bg-obsidian-950 text-zinc-100 font-sans antialiased min-h-screen flex flex-col selection:bg-violet-500/30 selection:text-violet-200">
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-full px-4 sm:px-0"></div>
+
+  <!-- Top Navigation & Model Configuration Bar -->
+  <header class="bg-obsidian-900/90 backdrop-blur-md border-b border-obsidian-700/80 sticky top-0 z-40">
+    <div class="max-w-[1440px] mx-auto px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+
+      <!-- Brand Logo & Title -->
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center text-white shadow-lg shadow-violet-900/40">
+            <i data-lucide="sparkles" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="text-base font-bold tracking-tight text-white">NanoStudio AI</h1>
+              <span class="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                Live AI Ready
+              </span>
+            </div>
+            <p class="text-xs text-zinc-400">Prompt-Driven Generative Image Studio</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Model Selector Controls -->
+      <div class="flex items-center gap-2.5">
+        <span class="hidden md:inline-flex items-center gap-1.5 text-xs font-medium text-zinc-400">
+          <i data-lucide="cpu" class="w-3.5 h-3.5 text-violet-400"></i>
+          <span>Engine:</span>
+        </span>
+        <!-- Model Selector Dropdown -->
+        <div class="relative flex-1 sm:flex-initial min-w-[240px]">
+          <select
+            id="model-selector"
+            aria-label="Select Gemini Image Model"
+            class="w-full appearance-none bg-obsidian-850 border border-obsidian-700 hover:border-zinc-600 text-xs font-medium text-zinc-200 rounded-xl pl-3.5 pr-8 py-2.5 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500 transition cursor-pointer"
+          >
+            <option value="gemini-2.5-flash-image">Gemini 2.5 Flash Image (Fast &amp; Balanced)</option>
+            <option value="gemini-3.1-flash-image" selected>Gemini 3.1 Flash Image (High Speed)</option>
+            <option value="gemini-3-pro-image">Gemini 3 Pro Image (Studio Quality)</option>
+          </select>
+          <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace Layout -->
+  <main class="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-6 py-5 grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+    <!-- LEFT SIDEBAR: Prompt Controls, Presets & Starter Photos (4 cols on lg) -->
+    <aside class="lg:col-span-4 flex flex-col gap-5">
+
+      <!-- Prompt & Generate Card -->
+      <section class="bg-obsidian-900 border border-obsidian-700/80 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i data-lucide="wand-2" class="w-4 h-4 text-violet-400"></i>
+            <h2 class="text-sm font-bold text-white">Edit Instruction</h2>
+          </div>
+          <span class="text-[11px] font-mono text-zinc-500">Ctrl + Enter</span>
+        </div>
+
+        <div class="relative">
+          <textarea
+            id="prompt-input"
+            rows="4"
+            placeholder="Describe how to edit your image... e.g., 'Change jacket to red leather streetwear hoodie, add moody neon rain reflections'"
+            class="w-full bg-obsidian-850 border border-obsidian-700 focus:border-violet-500 rounded-xl p-3.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-500/30 resize-none transition leading-relaxed"
+          ></textarea>
+          <button
+            type="button"
+            id="btn-clear-prompt"
+            title="Clear Prompt"
+            class="absolute bottom-2.5 right-2.5 p-1.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-obsidian-800 transition"
+          >
+            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+
+        <!-- One-Click Creative Style Presets -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-zinc-400">One-Click Style Presets</span>
+            <span class="text-[11px] text-zinc-500">Click to fill</span>
+          </div>
+          <div id="preset-chips-container" class="flex flex-wrap gap-1.5">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+
+        <!-- Primary Action Buttons -->
+        <div class="flex flex-col gap-2 pt-1">
+          <button
+            type="button"
+            id="btn-generate"
+            class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 active:scale-[0.99] text-white text-sm font-semibold shadow-lg shadow-violet-950/60 flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+            <span id="btn-generate-text">Generate AI Edit</span>
+          </button>
+
+          <!-- Iterative Continue Editing Button (Appears after an edit is created) -->
+          <button
+            type="button"
+            id="btn-continue-editing"
+            class="hidden w-full py-2.5 px-4 rounded-xl bg-obsidian-800 hover:bg-obsidian-700 border border-violet-500/40 text-violet-300 text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer"
+          >
+            <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+            <span>Use Result as New Base (Continue Editing)</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Starter Sample Photos Card -->
+      <section class="bg-obsidian-900 border border-obsidian-700/80 rounded-2xl p-4 sm:p-5 shadow-xl">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <i data-lucide="image" class="w-4 h-4 text-fuchsia-400"></i>
+            <h2 class="text-sm font-bold text-white">Starter Studio Samples</h2>
+          </div>
+          <label
+            for="file-upload-input"
+            class="text-xs font-semibold text-violet-400 hover:text-violet-300 cursor-pointer flex items-center gap-1 transition"
+          >
+            <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+            <span>Upload Own</span>
+          </label>
+        </div>
+        <p class="text-xs text-zinc-400 mb-3">Click any sample photo below to load it onto the canvas immediately:</p>
+
+        <div id="starter-samples-grid" class="grid grid-cols-3 gap-2.5">
+          <!-- Populated via JS with generated high-res canvas artwork -->
+        </div>
+      </section>
+
+    </aside>
+
+    <!-- RIGHT WORKSPACE: Canvas Viewer, Before/After Slider & History Strip (8 cols on lg) -->
+    <section class="lg:col-span-8 flex flex-col gap-4">
+
+      <!-- Canvas Toolbar -->
+      <div class="bg-obsidian-900 border border-obsidian-700/80 rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <!-- Image Metadata & Upload Trigger -->
+        <div class="flex items-center gap-3">
+          <input type="file" id="file-upload-input" accept="image/png,image/jpeg,image/webp" class="hidden" />
+          <button
+            type="button"
+            id="btn-trigger-upload"
+            class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-obsidian-800 hover:bg-obsidian-700 border border-obsidian-700 text-xs font-semibold text-zinc-200 transition cursor-pointer"
+          >
+            <i data-lucide="folder-open" class="w-3.5 h-3.5 text-violet-400"></i>
+            <span>Open Image</span>
+          </button>
+
+          <div id="image-meta-badge" class="hidden sm:flex items-center gap-2 text-xs font-mono text-zinc-400 bg-obsidian-850 px-3 py-1.5 rounded-xl border border-obsidian-800">
+            <span id="meta-dimensions">0 × 0</span>
+            <span class="text-zinc-600">•</span>
+            <span id="meta-filesize">0 KB</span>
+          </div>
+        </div>
+
+        <!-- View Mode Toggles & Export Button -->
+        <div class="flex items-center gap-2">
+          <!-- View Mode Switcher (Shown when an edited result exists) -->
+          <div id="view-mode-controls" class="hidden inline-flex rounded-xl bg-obsidian-850 p-1 border border-obsidian-700">
+            <button
+              type="button"
+              data-view-mode="split"
+              class="view-mode-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-violet-600 text-white shadow-sm transition"
+            >
+              Split Slider
+            </button>
+            <button
+              type="button"
+              data-view-mode="side-by-side"
+              class="view-mode-btn px-2.5 py-1 rounded-lg text-xs font-semibold text-zinc-400 hover:text-white transition"
+            >
+              Side-by-Side
+            </button>
+            <button
+              type="button"
+              data-view-mode="single"
+              class="view-mode-btn px-2.5 py-1 rounded-lg text-xs font-semibold text-zinc-400 hover:text-white transition"
+            >
+              Edited Only
+            </button>
+          </div>
+
+          <!-- Download PNG Button -->
+          <button
+            type="button"
+            id="btn-download-png"
+            disabled
+            class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-obsidian-800 disabled:text-zinc-500 disabled:border-obsidian-700 text-white border border-emerald-500/40 text-xs font-semibold shadow-sm transition cursor-pointer disabled:cursor-not-allowed"
+          >
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span>Download PNG</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Interactive Canvas Area -->
+      <div
+        id="canvas-dropzone"
+        class="relative flex-1 min-h-[400px] sm:min-h-[480px] bg-obsidian-900 border-2 border-dashed border-obsidian-700 rounded-2xl overflow-hidden flex items-center justify-center studio-checkerboard transition-colors"
+      >
+        <!-- Drag Over Highlight Overlay -->
+        <div id="drag-overlay" class="hidden absolute inset-0 z-30 bg-violet-950/80 backdrop-blur-sm border-2 border-violet-500 rounded-2xl flex flex-col items-center justify-center p-6 text-center pointer-events-none">
+          <div class="w-14 h-14 rounded-2xl bg-violet-600/30 border border-violet-400 flex items-center justify-center text-violet-200 mb-3">
+            <i data-lucide="upload-cloud" class="w-7 h-7"></i>
+          </div>
+          <p class="text-base font-bold text-white">Drop your image to load into NanoStudio</p>
+          <p class="text-xs text-violet-200 mt-1">Supports PNG, JPG, and WEBP</p>
+        </div>
+
+        <!-- Empty Dropzone Prompt (Visible before any image is loaded) -->
+        <div id="empty-canvas-state" class="p-8 text-center max-w-md">
+          <div class="w-16 h-16 rounded-2xl bg-obsidian-850 border border-obsidian-700 flex items-center justify-center text-violet-400 mx-auto mb-4 shadow-lg">
+            <i data-lucide="image-plus" class="w-8 h-8"></i>
+          </div>
+          <h3 class="text-base font-bold text-white">Drag &amp; Drop an Image Here</h3>
+          <p class="text-xs text-zinc-400 mt-1.5 leading-relaxed">
+            Upload a PNG, JPG, or WEBP photo from your device, or click one of the Starter Studio Samples on the left to test NanoStudio AI immediately.
+          </p>
+          <button
+            type="button"
+            id="btn-empty-upload"
+            class="mt-5 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-md transition cursor-pointer"
+          >
+            <i data-lucide="upload" class="w-4 h-4"></i>
+            <span>Select Image File</span>
+          </button>
+        </div>
+
+        <!-- Loading Spinner Overlay during AI Generation -->
+        <div id="loading-overlay" class="hidden absolute inset-0 z-30 bg-obsidian-950/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
+          <div class="relative w-14 h-14 mb-4">
+            <div class="absolute inset-0 rounded-full border-4 border-violet-500/20"></div>
+            <div class="absolute inset-0 rounded-full border-4 border-t-violet-500 border-r-fuchsia-500 animate-spin"></div>
+            <i data-lucide="sparkles" class="w-5 h-5 text-violet-300 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"></i>
+          </div>
+          <p id="loading-title" class="text-sm font-bold text-white">Synthesizing AI Edit...</p>
+          <p id="loading-subtitle" class="text-xs text-zinc-400 mt-1 max-w-xs">
+            Applying prompt transformations with Gemini image generation
+          </p>
+        </div>
+
+        <!-- 1. Original-Only Preview (When image is loaded, before first edit) -->
+        <div id="original-only-view" class="hidden w-full h-full flex items-center justify-center p-4">
+          <img id="img-original-solo" alt="Original Uploaded Image" class="max-h-[460px] w-auto max-w-full object-contain rounded-xl shadow-2xl border border-obsidian-700/60" />
+        </div>
+
+        <!-- 2. Interactive Split Before/After Comparison Slider -->
+        <div id="split-compare-view" class="hidden relative w-full h-full min-h-[400px] sm:min-h-[480px] flex items-center justify-center p-4 no-select">
+          <div id="split-stage" class="relative inline-block overflow-hidden rounded-xl shadow-2xl border border-obsidian-700/80 max-w-full">
+            <!-- Base Layer: Edited Image -->
+            <img id="img-split-after" alt="Edited Result" class="block max-h-[450px] w-auto max-w-full object-contain pointer-events-none" />
+
+            <!-- Clipped Top Layer: Original Image -->
+            <div id="split-before-clip" class="absolute inset-0 overflow-hidden pointer-events-none" style="clip-path: inset(0 50% 0 0);">
+              <img id="img-split-before" alt="Original Image" class="block w-full h-full object-contain" />
+            </div>
+
+            <!-- Corner Labels -->
+            <span class="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-obsidian-950/80 backdrop-blur-sm border border-white/10 text-[11px] font-semibold text-zinc-200 pointer-events-none">
+              Original
+            </span>
+            <span class="absolute top-3 right-3 px-2.5 py-1 rounded-lg bg-violet-950/85 backdrop-blur-sm border border-violet-400/30 text-[11px] font-semibold text-violet-200 pointer-events-none">
+              AI Edited
+            </span>
+
+            <!-- Draggable Vertical Divider & Handle -->
+            <div
+              id="split-divider"
+              class="absolute top-0 bottom-0 w-0.5 bg-white shadow-[0_0_12px_rgba(0,0,0,0.8)] cursor-ew-resize z-20"
+              style="left: 50%;"
+            >
+              <div class="w-9 h-9 rounded-full bg-white text-obsidian-950 shadow-xl border-2 border-violet-500 flex items-center justify-center absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                <i data-lucide="chevrons-left-right" class="w-4 h-4"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Side-by-Side Comparison View -->
+        <div id="side-by-side-view" class="hidden w-full h-full p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+          <div class="flex flex-col items-center gap-2">
+            <span class="text-xs font-semibold text-zinc-400">Original</span>
+            <img id="img-sbs-before" alt="Original" class="max-h-[400px] w-auto max-w-full object-contain rounded-xl border border-obsidian-700 shadow-lg" />
+          </div>
+          <div class="flex flex-col items-center gap-2">
+            <span class="text-xs font-semibold text-violet-400">AI Edited Result</span>
+            <img id="img-sbs-after" alt="Edited" class="max-h-[400px] w-auto max-w-full object-contain rounded-xl border border-violet-500/40 shadow-lg" />
+          </div>
+        </div>
+
+        <!-- 4. Single Edited Image View -->
+        <div id="single-edited-view" class="hidden w-full h-full flex items-center justify-center p-4">
+          <img id="img-single-after" alt="Edited Result" class="max-h-[460px] w-auto max-w-full object-contain rounded-xl shadow-2xl border border-violet-500/40" />
+        </div>
+      </div>
+
+      <!-- AI Response Note Banner (Displays any text commentary returned by Gemini) -->
+      <div id="ai-note-banner" class="hidden bg-obsidian-900 border border-obsidian-700/80 rounded-xl px-4 py-2.5 flex items-start gap-2.5 text-xs text-zinc-300">
+        <i data-lucide="message-square-sparkles" class="w-4 h-4 text-violet-400 shrink-0 mt-0.5"></i>
+        <p id="ai-note-text" class="leading-relaxed"></p>
+      </div>
+
+      <!-- Session Edit History Strip -->
+      <div class="bg-obsidian-900 border border-obsidian-700/80 rounded-2xl p-3.5">
+        <div class="flex items-center justify-between mb-2.5 px-1">
+          <div class="flex items-center gap-2">
+            <i data-lucide="history" class="w-3.5 h-3.5 text-zinc-400"></i>
+            <span class="text-xs font-bold text-zinc-200">Session Edit History</span>
+            <span id="history-count" class="text-[11px] font-mono text-zinc-500">(0)</span>
+          </div>
+          <button
+            type="button"
+            id="btn-clear-history"
+            class="hidden text-[11px] text-zinc-500 hover:text-rose-400 transition cursor-pointer"
+          >
+            Clear History
+          </button>
+        </div>
+
+        <div id="history-strip" class="flex items-center gap-2.5 overflow-x-auto pb-1 min-h-[68px]">
+          <p id="history-empty-text" class="text-xs text-zinc-500 px-1">
+            Generated edits will appear here so you can compare and switch versions anytime.
+          </p>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- Application Logic -->
+  <script>
+    /**
+     * NanoStudio AI — Single-File Client-Side Generative Photo Editor
+     * Pre-configured with embedded Gemini API Key for instant client-side image editing.
+     */
+    (function () {
+      'use strict';
+
+      // Pre-configured API Key & Storage Key
+      const GEMINI_API_KEY = 'AQ.Ab8RN6LSSmj3z_QEQNpR1vdYegJTyld9giXaR1EiFA6qqnhoPQ';
+      const LS_MODEL_KEY = 'nanostudio_selected_model_v2';
+
+      // Creative One-Click Style Presets
+      const STYLE_PRESETS = [
+        {
+          id: 'cyberpunk',
+          label: 'Cyberpunk Neon Night',
+          prompt: 'Transform the scene into a moody cyberpunk neon night with electric cyan and magenta rim lighting, wet reflective surfaces, and cinematic atmospheric glow while keeping the main subject intact.'
+        },
+        {
+          id: 'y2k',
+          label: '90s Y2K Film Aesthetic',
+          prompt: 'Apply a nostalgic 1990s Y2K disposable camera film aesthetic with warm flash highlights, subtle 35mm film grain, vintage halation, and retro color grading.'
+        },
+        {
+          id: 'studio',
+          label: 'Studio Product Lighting',
+          prompt: 'Relight the subject with crisp commercial studio softbox lighting, clean shadows, vibrant contrast, and a sleek professional editorial finish.'
+        },
+        {
+          id: 'anime',
+          label: 'Anime Cel-Shaded',
+          prompt: 'Restyle the entire image into a high-detail modern Japanese anime illustration with clean linework, cel-shaded lighting, and vibrant painted skies.'
+        },
+        {
+          id: 'red-jacket',
+          label: 'Change Outfit to Red Leather Jacket',
+          prompt: 'Change the person’s outfit into a tailored red leather streetwear jacket with metallic zippers while preserving their exact pose, face, and background.'
+        },
+        {
+          id: 'golden-hour',
+          label: 'Golden Hour Sunset',
+          prompt: 'Bathe the entire photograph in warm golden hour sunset sunlight with soft lens flare, long amber shadows, and rich natural warmth.'
+        }
+      ];
+
+      // Application State
+      const state = {
+        originalBase64: null,   // Raw base64 string without data: prefix
+        originalMimeType: 'image/png',
+        originalDataUrl: null,  // Full data:image/... URL
+        editedDataUrl: null,    // Full data:image/... URL of current result
+        viewMode: 'split',      // 'split' | 'side-by-side' | 'single'
+        splitPercent: 50,
+        isDraggingSlider: false,
+        isGenerating: false,
+        history: [],            // Array of { id, prompt, model, originalDataUrl, editedDataUrl, note, timestamp }
+        activeHistoryId: null
+      };
+
+      // DOM Element References
+      const els = {
+        modelSelector: document.getElementById('model-selector'),
+
+        promptInput: document.getElementById('prompt-input'),
+        btnClearPrompt: document.getElementById('btn-clear-prompt'),
+        presetChipsContainer: document.getElementById('preset-chips-container'),
+        btnGenerate: document.getElementById('btn-generate'),
+        btnGenerateText: document.getElementById('btn-generate-text'),
+        btnContinueEditing: document.getElementById('btn-continue-editing'),
+        starterSamplesGrid: document.getElementById('starter-samples-grid'),
+
+        fileUploadInput: document.getElementById('file-upload-input'),
+        btnTriggerUpload: document.getElementById('btn-trigger-upload'),
+        btnEmptyUpload: document.getElementById('btn-empty-upload'),
+        imageMetaBadge: document.getElementById('image-meta-badge'),
+        metaDimensions: document.getElementById('meta-dimensions'),
+        metaFilesize: document.getElementById('meta-filesize'),
+
+        viewModeControls: document.getElementById('view-mode-controls'),
+        viewModeBtns: document.querySelectorAll('.view-mode-btn'),
+        btnDownloadPng: document.getElementById('btn-download-png'),
+
+        canvasDropzone: document.getElementById('canvas-dropzone'),
+        dragOverlay: document.getElementById('drag-overlay'),
+        emptyCanvasState: document.getElementById('empty-canvas-state'),
+        loadingOverlay: document.getElementById('loading-overlay'),
+        loadingTitle: document.getElementById('loading-title'),
+        loadingSubtitle: document.getElementById('loading-subtitle'),
+
+        originalOnlyView: document.getElementById('original-only-view'),
+        imgOriginalSolo: document.getElementById('img-original-solo'),
+
+        splitCompareView: document.getElementById('split-compare-view'),
+        splitStage: document.getElementById('split-stage'),
+        imgSplitAfter: document.getElementById('img-split-after'),
+        splitBeforeClip: document.getElementById('split-before-clip'),
+        imgSplitBefore: document.getElementById('img-split-before'),
+        splitDivider: document.getElementById('split-divider'),
+
+        sideBySideView: document.getElementById('side-by-side-view'),
+        imgSbsBefore: document.getElementById('img-sbs-before'),
+        imgSbsAfter: document.getElementById('img-sbs-after'),
+
+        singleEditedView: document.getElementById('single-edited-view'),
+        imgSingleAfter: document.getElementById('img-single-after'),
+
+        aiNoteBanner: document.getElementById('ai-note-banner'),
+        aiNoteText: document.getElementById('ai-note-text'),
+
+        historyStrip: document.getElementById('history-strip'),
+        historyCount: document.getElementById('history-count'),
+        historyEmptyText: document.getElementById('history-empty-text'),
+        btnClearHistory: document.getElementById('btn-clear-history'),
+
+        toastContainer: document.getElementById('toast-container')
+      };
+
+      // Toast Notification Helper
+      function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        const styles = {
+          success: 'bg-emerald-950/95 border-emerald-500/40 text-emerald-100',
+          error: 'bg-rose-950/95 border-rose-500/40 text-rose-100',
+          info: 'bg-obsidian-850/95 border-violet-500/40 text-zinc-100'
+        };
+        const icons = {
+          success: 'check-circle-2',
+          error: 'alert-triangle',
+          info: 'sparkles'
+        };
+
+        toast.className = `pointer-events-auto flex items-start gap-2.5 px-4 py-3 rounded-xl border shadow-2xl backdrop-blur-md text-xs font-medium transition-all duration-300 translate-y-2 opacity-0 ${styles[type] || styles.info}`;
+        toast.innerHTML = `<i data-lucide="${icons[type] || 'info'}" class="w-4 h-4 shrink-0 mt-0.5"></i><span class="leading-relaxed">${message}</span>`;
+
+        els.toastContainer.appendChild(toast);
+        if (window.lucide) window.lucide.createIcons();
+
+        requestAnimationFrame(() => {
+          toast.classList.remove('translate-y-2', 'opacity-0');
+        });
+
+        setTimeout(() => {
+          toast.classList.add('translate-y-2', 'opacity-0');
+          setTimeout(() => toast.remove(), 300);
+        }, 4000);
+      }
+
+      // Generate Crisp Built-In Starter Studio Sample Artwork via Offscreen Canvas
+      function createStarterSampleDataUrl(type) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 800;
+        canvas.height = 800;
+        const ctx = canvas.getContext('2d');
+
+        if (type === 'streetwear') {
+          // Futuristic Streetwear Portrait Composition
+          const bg = ctx.createLinearGradient(0, 0, 800, 800);
+          bg.addColorStop(0, '#1e1b4b');
+          bg.addColorStop(0.5, '#312e81');
+          bg.addColorStop(1, '#0f172a');
+          ctx.fillStyle = bg;
+          ctx.fillRect(0, 0, 800, 800);
+
+          // Glowing Halo Ring
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 14;
+          ctx.beginPath();
+          ctx.arc(400, 310, 175, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Stylized Hooded Silhouette
+          ctx.fillStyle = '#e2e8f0';
+          ctx.beginPath();
+          ctx.arc(400, 310, 95, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Visor Sunglasses
+          ctx.fillStyle = '#09090b';
+          ctx.fillRect(325, 285, 150, 36);
+          ctx.fillStyle = '#f43f5e';
+          ctx.fillRect(333, 293, 134, 8);
+
+          // Streetwear Jacket Shoulders
+          const jacket = ctx.createLinearGradient(200, 430, 600, 800);
+          jacket.addColorStop(0, '#475569');
+          jacket.addColorStop(1, '#1e293b');
+          ctx.fillStyle = jacket;
+          ctx.beginPath();
+          ctx.moveTo(180, 800);
+          ctx.quadraticCurveTo(210, 440, 400, 440);
+          ctx.quadraticCurveTo(590, 440, 620, 800);
+          ctx.closePath();
+          ctx.fill();
+
+          // Accent Zipper
+          ctx.strokeStyle = '#94a3b8';
+          ctx.lineWidth = 6;
+          ctx.beginPath();
+          ctx.moveTo(400, 440);
+          ctx.lineTo(400, 800);
+          ctx.stroke();
+        } else if (type === 'urban') {
+          // Urban Night Skyline & Wet Street Reflections
+          const sky = ctx.createLinearGradient(0, 0, 0, 520);
+          sky.addColorStop(0, '#09090b');
+          sky.addColorStop(1, '#1e293b');
+          ctx.fillStyle = sky;
+          ctx.fillRect(0, 0, 800, 520);
+
+          // Buildings
+          const buildings = [
+            { x: 40, y: 170, w: 130, h: 350, c: '#111827' },
+            { x: 190, y: 110, w: 150, h: 410, c: '#1f2937' },
+            { x: 365, y: 150, w: 140, h: 370, c: '#0f172a' },
+            { x: 530, y: 90, w: 220, h: 430, c: '#18181b' }
+          ];
+          buildings.forEach(b => {
+            ctx.fillStyle = b.c;
+            ctx.fillRect(b.x, b.y, b.w, b.h);
+            ctx.fillStyle = '#fbbf24';
+            for (let wy = b.y + 24; wy < 490; wy += 36) {
+              for (let wx = b.x + 18; wx < b.x + b.w - 22; wx += 28) {
+                if ((wx + wy) % 3 === 0) ctx.fillRect(wx, wy, 12, 18);
+              }
+            }
+          });
+
+          // Asphalt Road
+          ctx.fillStyle = '#09090b';
+          ctx.fillRect(0, 520, 800, 280);
+
+          // Perspective Lane Lines
+          ctx.strokeStyle = '#64748b';
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.moveTo(360, 520);
+          ctx.lineTo(140, 800);
+          ctx.moveTo(440, 520);
+          ctx.lineTo(660, 800);
+          ctx.stroke();
+        } else {
+          // Product Studio Sneaker / Audio Headphone Pedestal Shot
+          const studioBg = ctx.createRadialGradient(400, 360, 60, 400, 400, 520);
+          studioBg.addColorStop(0, '#3f3f46');
+          studioBg.addColorStop(1, '#18181b');
+          ctx.fillStyle = studioBg;
+          ctx.fillRect(0, 0, 800, 800);
+
+          // Studio Cylinder Pedestal
+          ctx.fillStyle = '#27272a';
+          ctx.fillRect(210, 520, 380, 280);
+          ctx.fillStyle = '#52525b';
+          ctx.beginPath();
+          ctx.ellipse(400, 520, 190, 42, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Minimalist Studio Headphones Subject
+          ctx.strokeStyle = '#f4f4f5';
+          ctx.lineWidth = 24;
+          ctx.beginPath();
+          ctx.arc(400, 340, 130, Math.PI, 0);
+          ctx.stroke();
+
+          ctx.fillStyle = '#e4e4e7';
+          ctx.beginPath();
+          ctx.roundRect(245, 320, 46, 125, 22);
+          ctx.roundRect(509, 320, 46, 125, 22);
+          ctx.fill();
+        }
+
+        return canvas.toDataURL('image/png');
+      }
+
+      // Initialize Starter Samples UI
+      function initStarterSamples() {
+        const samples = [
+          { id: 'streetwear', title: 'Streetwear Portrait', dataUrl: createStarterSampleDataUrl('streetwear') },
+          { id: 'urban', title: 'Urban Night Street', dataUrl: createStarterSampleDataUrl('urban') },
+          { id: 'product', title: 'Product Studio Shot', dataUrl: createStarterSampleDataUrl('product') }
+        ];
+
+        els.starterSamplesGrid.innerHTML = samples.map(sample => `
+          <button
+            type="button"
+            data-sample-id="${sample.id}"
+            class="group relative rounded-xl overflow-hidden border border-obsidian-700 hover:border-violet-500 bg-obsidian-850 aspect-square focus:outline-none focus:ring-2 focus:ring-violet-500 transition cursor-pointer"
+            title="Load ${sample.title}"
+          >
+            <img src="${sample.dataUrl}" alt="${sample.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+            <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-1.5 text-left">
+              <p class="text-[10px] font-semibold text-white leading-tight truncate">${sample.title}</p>
+            </div>
+          </button>
+        `).join('');
+
+        els.starterSamplesGrid.querySelectorAll('button').forEach((btn, idx) => {
+          btn.addEventListener('click', () => {
+            loadDataUrlIntoCanvas(samples[idx].dataUrl, `${samples[idx].title}.png`);
+            showToast(`Loaded "${samples[idx].title}" onto canvas.`, 'info');
+          });
+        });
+      }
+
+      // Initialize Preset Style Chips
+      function initPresetChips() {
+        els.presetChipsContainer.innerHTML = STYLE_PRESETS.map(preset => `
+          <button
+            type="button"
+            data-preset-id="${preset.id}"
+            class="px-2.5 py-1.5 rounded-lg bg-obsidian-850 hover:bg-violet-600/20 border border-obsidian-700 hover:border-violet-500/50 text-[11px] font-medium text-zinc-300 hover:text-violet-200 transition cursor-pointer"
+          >
+            ${preset.label}
+          </button>
+        `).join('');
+
+        els.presetChipsContainer.querySelectorAll('button').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const found = STYLE_PRESETS.find(p => p.id === btn.dataset.presetId);
+            if (found) {
+              els.promptInput.value = found.prompt;
+              els.promptInput.focus();
+            }
+          });
+        });
+      }
+
+      // Load DataURL Image into Studio State & Update Metadata
+      function loadDataUrlIntoCanvas(dataUrl, fileName = 'image.png', byteSize = null) {
+        const parts = dataUrl.split(',');
+        const mimeMatch = parts[0].match(/:(.*?);/);
+        state.originalMimeType = mimeMatch ? mimeMatch[1] : 'image/png';
+        state.originalBase64 = parts[1];
+        state.originalDataUrl = dataUrl;
+        state.editedDataUrl = null;
+        state.activeHistoryId = null;
+
+        // Measure image dimensions
+        const img = new Image();
+        img.onload = () => {
+          const approxBytes = byteSize || Math.round((state.originalBase64.length * 3) / 4);
+          const kb = (approxBytes / 1024).toFixed(1);
+          els.metaDimensions.textContent = `${img.naturalWidth} × ${img.naturalHeight}`;
+          els.metaFilesize.textContent = `${kb} KB`;
+          els.imageMetaBadge.classList.remove('hidden');
+          els.imageMetaBadge.classList.add('flex');
+        };
+        img.src = dataUrl;
+
+        els.aiNoteBanner.classList.add('hidden');
+        els.btnContinueEditing.classList.add('hidden');
+        els.btnDownloadPng.disabled = true;
+        renderCanvasStage();
+      }
+
+      // Handle Uploaded File (File Picker or Drag & Drop)
+      function handleImageFile(file) {
+        if (!file) return;
+        const validTypes = ['image/png', 'image/jpeg', 'image/webp'];
+        if (!validTypes.includes(file.type)) {
+          showToast('Unsupported format. Please upload a PNG, JPG, or WEBP image.', 'error');
+          return;
+        }
+        if (file.size > 15 * 1024 * 1024) {
+          showToast('Image exceeds 15 MB. Please choose a smaller image.', 'error');
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          loadDataUrlIntoCanvas(e.target.result, file.name, file.size);
+          showToast(`Loaded "${file.name}"`, 'success');
+        };
+        reader.onerror = () => {
+          showToast('Failed to read image file.', 'error');
+        };
+        reader.readAsDataURL(file);
+      }
+
+      // Render Appropriate View Mode in the Main Canvas Area
+      function renderCanvasStage() {
+        // Hide all sub-views first
+        els.emptyCanvasState.classList.add('hidden');
+        els.originalOnlyView.classList.add('hidden');
+        els.splitCompareView.classList.add('hidden');
+        els.sideBySideView.classList.add('hidden');
+        els.singleEditedView.classList.add('hidden');
+
+        if (!state.originalDataUrl) {
+          els.emptyCanvasState.classList.remove('hidden');
+          els.viewModeControls.classList.add('hidden');
+          return;
+        }
+
+        // If we only have the original image and no edit yet
+        if (!state.editedDataUrl) {
+          els.viewModeControls.classList.add('hidden');
+          els.imgOriginalSolo.src = state.originalDataUrl;
+          els.originalOnlyView.classList.remove('hidden');
+          return;
+        }
+
+        // We have both Original and Edited images
+        els.viewModeControls.classList.remove('hidden');
+        els.btnDownloadPng.disabled = false;
+        els.btnContinueEditing.classList.remove('hidden');
+
+        // Update View Mode Button Active Styling
+        els.viewModeBtns.forEach(btn => {
+          const isActive = btn.dataset.viewMode === state.viewMode;
+          btn.className = isActive
+            ? 'view-mode-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-violet-600 text-white shadow-sm transition cursor-pointer'
+            : 'view-mode-btn px-2.5 py-1 rounded-lg text-xs font-semibold text-zinc-400 hover:text-white transition cursor-pointer';
+        });
+
+        if (state.viewMode === 'split') {
+          els.imgSplitBefore.src = state.originalDataUrl;
+          els.imgSplitAfter.src = state.editedDataUrl;
+          updateSplitPosition(state.splitPercent);
+          els.splitCompareView.classList.remove('hidden');
+        } else if (state.viewMode === 'side-by-side') {
+          els.imgSbsBefore.src = state.originalDataUrl;
+          els.imgSbsAfter.src = state.editedDataUrl;
+          els.sideBySideView.classList.remove('hidden');
+        } else {
+          els.imgSingleAfter.src = state.editedDataUrl;
+          els.singleEditedView.classList.remove('hidden');
+        }
+      }
+
+      // Update Split Comparison Slider Percentage
+      function updateSplitPosition(percent) {
+        const clamped = Math.max(0, Math.min(100, percent));
+        state.splitPercent = clamped;
+        els.splitBeforeClip.style.clipPath = `inset(0 ${100 - clamped}% 0 0)`;
+        els.splitDivider.style.left = `${clamped}%`;
+      }
+
+      // Bind Interactive Mouse & Touch Events for Split Slider
+      function initSplitSliderEvents() {
+        const updateFromClientX = (clientX) => {
+          const rect = els.splitStage.getBoundingClientRect();
+          if (rect.width <= 0) return;
+          const pct = ((clientX - rect.left) / rect.width) * 100;
+          updateSplitPosition(pct);
+        };
+
+        els.splitStage.addEventListener('mousedown', (e) => {
+          state.isDraggingSlider = true;
+          updateFromClientX(e.clientX);
+        });
+
+        window.addEventListener('mousemove', (e) => {
+          if (!state.isDraggingSlider) return;
+          updateFromClientX(e.clientX);
+        });
+
+        window.addEventListener('mouseup', () => {
+          state.isDraggingSlider = false;
+        });
+
+        els.splitStage.addEventListener('touchstart', (e) => {
+          state.isDraggingSlider = true;
+          if (e.touches[0]) updateFromClientX(e.touches[0].clientX);
+        }, { passive: true });
+
+        window.addEventListener('touchmove', (e) => {
+          if (!state.isDraggingSlider) return;
+          if (e.touches[0]) updateFromClientX(e.touches[0].clientX);
+        }, { passive: true });
+
+        window.addEventListener('touchend', () => {
+          state.isDraggingSlider = false;
+        });
+      }
+
+      // Direct Google Gemini API Image Editing Call with Exponential Backoff
+      async function callGeminiImageEdit({ apiKey, model, base64Data, mimeType, promptText }) {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+        const payload = {
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: promptText
+                },
+                {
+                  inlineData: {
+                    mimeType: mimeType,
+                    data: base64Data
+                  }
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            responseModalities: ['TEXT', 'IMAGE']
+          }
+        };
+
+        const delays = [1000, 2000, 4000];
+        let response = null;
+        let data = null;
+
+        for (let attempt = 0; attempt <= delays.length; attempt++) {
+          response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+          });
+
+          data = await response.json();
+
+          if (response.ok) {
+            break;
+          }
+
+          // Retry on 429 (Rate Limit) or 503 (Service Unavailable)
+          if ((response.status === 429 || response.status === 503) && attempt < delays.length) {
+            await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+            continue;
+          }
+
+          const apiErrMsg = data?.error?.message || `HTTP ${response.status} error from Gemini API.`;
+          throw new Error(apiErrMsg);
+        }
+
+        const candidate = data?.candidates?.[0];
+        if (!candidate) {
+          throw new Error('No output returned from Gemini. The prompt may have triggered a safety filter.');
+        }
+
+        if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+          throw new Error(`Generation halted (${candidate.finishReason}). Try rephrasing your prompt.`);
+        }
+
+        const parts = candidate.content?.parts || [];
+        let returnedImageUrl = null;
+        let returnedTextNotes = [];
+
+        for (const part of parts) {
+          if (part.inlineData && part.inlineData.data) {
+            const outMime = part.inlineData.mimeType || 'image/png';
+            returnedImageUrl = `data:${outMime};base64,${part.inlineData.data}`;
+          } else if (part.text) {
+            returnedTextNotes.push(part.text.trim());
+          }
+        }
+
+        if (!returnedImageUrl) {
+          throw new Error(
+            returnedTextNotes.length > 0
+              ? `Model replied with text instead of an image: "${returnedTextNotes.join(' ')}"`
+              : 'Gemini returned a response without image data. Try selecting a different image model.'
+          );
+        }
+
+        return {
+          editedDataUrl: returnedImageUrl,
+          note: returnedTextNotes.join(' ')
+        };
+      }
+
+      // Add Edit Entry to Session History Strip
+      function addToHistory(entry) {
+        state.history.unshift(entry);
+        state.activeHistoryId = entry.id;
+        renderHistoryStrip();
+      }
+
+      // Render Session Edit History Thumbnails
+      function renderHistoryStrip() {
+        els.historyCount.textContent = `(${state.history.length})`;
+
+        if (state.history.length === 0) {
+          els.historyEmptyText.classList.remove('hidden');
+          els.btnClearHistory.classList.add('hidden');
+          els.historyStrip.innerHTML = '';
+          els.historyStrip.appendChild(els.historyEmptyText);
+          return;
+        }
+
+        els.historyEmptyText.classList.add('hidden');
+        els.btnClearHistory.classList.remove('hidden');
+
+        els.historyStrip.innerHTML = state.history.map(item => {
+          const isSelected = item.id === state.activeHistoryId;
+          return `
+            <button
+              type="button"
+              data-history-id="${item.id}"
+              title="${item.prompt.replace(/"/g, '&quot;')}"
+              class="group relative shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 transition cursor-pointer ${
+                isSelected
+                  ? 'border-violet-500 ring-2 ring-violet-500/30'
+                  : 'border-obsidian-700 hover:border-zinc-500 opacity-80 hover:opacity-100'
+              }"
+            >
+              <img src="${item.editedDataUrl}" alt="Edit version" class="w-full h-full object-cover" />
+              <span class="absolute bottom-0 inset-x-0 bg-black/75 text-[9px] font-mono text-zinc-200 px-1 py-0.5 truncate">
+                ${item.timestamp}
+              </span>
+            </button>
+          `;
+        }).join('');
+
+        els.historyStrip.querySelectorAll('button').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const found = state.history.find(h => h.id === btn.dataset.historyId);
+            if (!found) return;
+            state.activeHistoryId = found.id;
+            state.originalDataUrl = found.originalDataUrl;
+            const parts = found.originalDataUrl.split(',');
+            state.originalBase64 = parts[1];
+            state.editedDataUrl = found.editedDataUrl;
+            els.promptInput.value = found.prompt;
+
+            if (found.note) {
+              els.aiNoteText.textContent = found.note;
+              els.aiNoteBanner.classList.remove('hidden');
+            } else {
+              els.aiNoteBanner.classList.add('hidden');
+            }
+
+            renderCanvasStage();
+            renderHistoryStrip();
+          });
+        });
+      }
+
+      // Main Generate Handler
+      async function handleGenerateEdit() {
+        if (state.isGenerating) return;
+
+        if (!state.originalDataUrl || !state.originalBase64) {
+          showToast('Please upload an image or pick a Starter Studio Sample first.', 'error');
+          return;
+        }
+
+        const promptText = els.promptInput.value.trim();
+        if (!promptText) {
+          showToast('Enter an editing instruction or select a Style Preset.', 'error');
+          els.promptInput.focus();
+          return;
+        }
+
+        const selectedModel = els.modelSelector.value;
+
+        // Lock UI into loading state
+        state.isGenerating = true;
+        els.btnGenerate.disabled = true;
+        els.btnGenerateText.textContent = 'Generating...';
+        els.loadingTitle.textContent = `Editing with ${selectedModel}...`;
+        els.loadingSubtitle.textContent = 'Synthesizing your prompt transformation with Gemini AI';
+        els.loadingOverlay.classList.remove('hidden');
+
+        try {
+          const result = await callGeminiImageEdit({
+            apiKey: GEMINI_API_KEY,
+            model: selectedModel,
+            base64Data: state.originalBase64,
+            mimeType: state.originalMimeType,
+            promptText
+          });
+
+          state.editedDataUrl = result.editedDataUrl;
+          state.viewMode = 'split';
+          state.splitPercent = 50;
+
+          if (result.note) {
+            els.aiNoteText.textContent = result.note;
+            els.aiNoteBanner.classList.remove('hidden');
+          } else {
+            els.aiNoteBanner.classList.add('hidden');
+          }
+
+          const now = new Date();
+          const timeLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+          addToHistory({
+            id: 'edit-' + Date.now(),
+            prompt: promptText,
+            model: selectedModel,
+            originalDataUrl: state.originalDataUrl,
+            editedDataUrl: result.editedDataUrl,
+            note: result.note || '',
+            timestamp: timeLabel
+          });
+
+          renderCanvasStage();
+          showToast('AI edit generated successfully!', 'success');
+        } catch (err) {
+          console.error('NanoStudio Generation Error:', err);
+          showToast(err.message || 'An unexpected error occurred during generation.', 'error');
+        } finally {
+          state.isGenerating = false;
+          els.btnGenerate.disabled = false;
+          els.btnGenerateText.textContent = 'Generate AI Edit';
+          els.loadingOverlay.classList.add('hidden');
+        }
+      }
+
+      // Load Saved Model Preference from LocalStorage
+      function loadSavedSettings() {
+        try {
+          const savedModel = localStorage.getItem(LS_MODEL_KEY);
+          if (savedModel && [...els.modelSelector.options].some(o => o.value === savedModel)) {
+            els.modelSelector.value = savedModel;
+          }
+        } catch (_) {}
+      }
+
+      // Bind All UI Event Listeners
+      function bindEvents() {
+        // Model Selector Persistence
+        els.modelSelector.addEventListener('change', () => {
+          try {
+            localStorage.setItem(LS_MODEL_KEY, els.modelSelector.value);
+          } catch (_) {}
+        });
+
+        // Clear Prompt
+        els.btnClearPrompt.addEventListener('click', () => {
+          els.promptInput.value = '';
+          els.promptInput.focus();
+        });
+
+        // Ctrl/Cmd + Enter Shortcut in Prompt Textarea
+        els.promptInput.addEventListener('keydown', (e) => {
+          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            e.preventDefault();
+            handleGenerateEdit();
+          }
+        });
+
+        // Generate Button
+        els.btnGenerate.addEventListener('click', handleGenerateEdit);
+
+        // Iterative "Continue Editing" Button (Promotes current Edited Result to Original Base)
+        els.btnContinueEditing.addEventListener('click', () => {
+          if (!state.editedDataUrl) return;
+          loadDataUrlIntoCanvas(state.editedDataUrl, 'iterative-base.png');
+          els.promptInput.value = '';
+          els.promptInput.focus();
+          showToast('Promoted edited result to base image. Enter your next instruction!', 'info');
+        });
+
+        // File Upload Triggers
+        els.btnTriggerUpload.addEventListener('click', () => els.fileUploadInput.click());
+        els.btnEmptyUpload.addEventListener('click', () => els.fileUploadInput.click());
+        els.fileUploadInput.addEventListener('change', (e) => {
+          if (e.target.files && e.target.files[0]) {
+            handleImageFile(e.target.files[0]);
+            e.target.value = '';
+          }
+        });
+
+        // Drag & Drop Events on Canvas Dropzone
+        ['dragenter', 'dragover'].forEach(evtName => {
+          els.canvasDropzone.addEventListener(evtName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            els.dragOverlay.classList.remove('hidden');
+          });
+        });
+
+        ['dragleave', 'drop'].forEach(evtName => {
+          els.canvasDropzone.addEventListener(evtName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            els.dragOverlay.classList.add('hidden');
+          });
+        });
+
+        els.canvasDropzone.addEventListener('drop', (e) => {
+          const files = e.dataTransfer?.files;
+          if (files && files[0]) {
+            handleImageFile(files[0]);
+          }
+        });
+
+        // View Mode Switcher Buttons
+        els.viewModeBtns.forEach(btn => {
+          btn.addEventListener('click', () => {
+            state.viewMode = btn.dataset.viewMode;
+            renderCanvasStage();
+          });
+        });
+
+        // Download PNG Button
+        els.btnDownloadPng.addEventListener('click', () => {
+          if (!state.editedDataUrl) return;
+          const link = document.createElement('a');
+          link.href = state.editedDataUrl;
+          link.download = `nanostudio-edit-${Date.now()}.png`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          showToast('Downloaded edited PNG image.', 'success');
+        });
+
+        // Clear Session History
+        els.btnClearHistory.addEventListener('click', () => {
+          state.history = [];
+          state.activeHistoryId = null;
+          renderHistoryStrip();
+          showToast('Session edit history cleared.', 'info');
+        });
+      }
+
+      // Bootstrap Application
+      window.addEventListener('DOMContentLoaded', () => {
+        initPresetChips();
+        initStarterSamples();
+        initSplitSliderEvents();
+        loadSavedSettings();
+        bindEvents();
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
